@@ -1,0 +1,6 @@
+names:
+  0: license_plate
+path: C:\Users\Joonghyuk Seong\PycharmProjects\31256-Image-Processing-and-Pattern-Recognition
+test: dataset\images\test
+train: dataset\images\train
+val: dataset\images\val
