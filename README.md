@@ -1,68 +1,117 @@
 # 31256 Image Processing and Pattern Recognition - Spring 2024
+
 ## Assignment Task 2: Vehicle License Plate Recognition System Implementation
 
 ## Group 12 Members
-| SID | Name |
-|-----|------|
-| 13740802 | Joonghyuk Seong |
-| 24587065 | Jing Ou |
-| 24749867 | Benjamin Balogh |
+
+| SID      | Name             |
+|----------|------------------|
+| 13740802 | Joonghyuk Seong  |
+| 24587065 | Jing Ou          |
+| 24749867 | Benjamin Balogh  |
 | 14417289 | Pansilu Fernando |
-| 24580312 | Jiapeng Yang |
-| 14011276 | Yixuan Li |
+| 24580312 | Jiapeng Yang     |
+| 14011276 | Yixuan Li        |
 
 ## Project Overview
-This repository contains an implementation of an Automatic License Plate Recognition (ALPR) system that addresses the challenges of license plate detection across various vehicle models. The system utilizes image processing techniques, machine learning, and deep learning approaches.
+This project implements a deep learning model for license plate detection using YOLOv11n. The model is designed to detect and localize license plates in various conditions with high accuracy.
 
-## Technical Implementation
+## Technical Details
 
-### Pre-processing
-- Image resizing
-- Grayscale conversion
-- Noise reduction
-- Contrast enhancement
+### Model Architecture
+- Base Model: YOLOv11n
+- Input Resolution: 640x640
+- Backbone: modified C3K2 architecture
 
-### Main Techniques
-1. Traditional Image Processing
-   - OCR
-   - Template Matching
+### Dataset
+- Training Images: 25,470
+- Validation Images: 1,073
+- Single Class: License Plate
+- Data Split: ~96% train, ~4% validation
 
-2. Machine Learning
-   - Support Vector Machines (SVM)
-   - k-Nearest Neighbors (k-NN)
+### Training Configuration
+- Epochs: 50
+- Batch Size: 16
+- Optimizer: AdamW
+- Initial Learning Rate: 0.01
+- Final Learning Rate: 0.000109
+- Cosine LR Schedule: Enabled
+- Data Augmentation:
+  - Random Flip (50% probability)
+  - Scale: ±50%
+  - Translation: ±10%
+  - Auto Augment: RandAugment
+  - Erasing: 0.4
+  - Mosaic: Enabled
 
-3. Deep Learning
-   - Convolutional Neural Networks (CNN)
-   - Recurrent Neural Networks (RNN) with LSTM
-
-## Installation Requirements
-
-### Required Libraries
-```bash
-pip install opencv-python
-pip install numpy
-pip install torch
-pip install tensorflow
-pip install pytesseract
-pip install Pillow
-```
-
-### Tesseract OCR Installation
-#### Windows
-1. Download and install Tesseract installer from: https://github.com/UB-Mannheim/tesseract/wiki
-2. Add Tesseract path to environment variables
-
-#### Linux
-```bash
-sudo apt-get install tesseract-ocr
-```
+### Hardware
+- GPU: NVIDIA RTX 2070 (8GB)
+- Training Time: ~8,955 seconds (~2.5 hours)
 
 ## Performance Metrics
-- Detection Accuracy: Target > 90%
-- Precision: Target > 80%
-- Recall: Target > 75%
-- Recognition Accuracy: Target > 95%
-- Processing Time: < 1 second per image
+
+### Final Model Performance
+- mAP50: 0.811 (81.1%)
+- Precision: 0.841 (84.1%)
+- Recall: 0.763 (76.3%)
+- mAP50-95: 0.421 (42.1%)
+
+### Training Progress
+- Best mAP50: 0.812 (Epoch 46)
+- Final Box Loss: 1.053
+- Final Classification Loss: 0.405
+- Final DFL Loss: 1.104
+
+## Usage
+
+### Installation
+```bash
+pip install ultralytics
+```
+
+### Inference
+```python
+from ultralytics import YOLO
+
+# Load the trained model
+model = YOLO('best.pt')
+
+# Perform detection
+results = model('image.jpg')
+```
+
+### Training
+```python
+from ultralytics import YOLO
+
+# Load the base model
+model = YOLO('yolo11n.pt')
+
+# Start training
+results = model.train(
+    data='dataset.yaml',
+    epochs=50,
+    imgsz=640,
+    batch=16,
+    patience=10,
+    device=0,
+    workers=8,
+    cos_lr=True,
+    optimizer='AdamW'
+)
+```
+
+## Dependencies
+- Python 3.8+
+- PyTorch 2.0+
+- Ultralytics 8.0+
+- OpenCV
+- numpy
+- pandas
+
+## Model Weights
+- Best model weights: `best.pt`
+- Final model weights: `last.pt`
 
 ---
-© 2024 31256 IPPR Group 12
+The model achieves robust performance with good precision and recall, making it suitable for real-world license plate detection applications. The balance between computational efficiency and detection accuracy makes it particularly suitable for deployment in production environments.
