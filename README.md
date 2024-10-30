@@ -21,12 +21,12 @@ This project implements an advanced license plate detection system using YOLOv11
 - mAP50-95: 0.421 (42.1%)
 
 ## Dataset
-The project utilizes one of the largest publicly available license plate detection datasets:
+The project utilizes a comprehensive license plate detection dataset from Kaggle:
 - **Total Images**: 27,900
   - Training Set: 25,500 images
   - Validation Set: 1,000 images
   - Test Set: 400 images
-- **Source**: Derived from Google Open Images and Roboflow
+- **Source**: [Large License Plate Dataset (Kaggle)](https://www.kaggle.com/datasets/fareselmenshawii/large-license-plate-dataset)
 - **Format**: YOLO annotation format
 - **License**: CC0 (Public Domain)
 
@@ -141,3 +141,7 @@ Final Metrics (Epoch 50):
 - mAP50: 0.811
 - mAP50-95: 0.421
 ```
+
+## Acknowledgments
+- Dataset from Kaggle: "Large License Plate Dataset" by Fares Elmenshawi
+- Implementation based on the Ultralytics YOLO framework
