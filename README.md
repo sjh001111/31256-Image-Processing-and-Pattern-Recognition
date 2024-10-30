@@ -31,10 +31,13 @@ The project utilizes a comprehensive license plate detection dataset from Kaggle
 - **License**: CC0 (Public Domain)
 
 ## Model Architecture
-- Base Model: YOLOv11n
+- Base Model: YOLOv11n (Extended YOLOv8n architecture)
 - Input Resolution: 640x640
-- Backbone: Modified C3K2 architecture
-- Feature Pyramid Network for multi-scale detection
+- Backbone Features:
+  - C3k2 Backbone with PSA (Polarized Self-Attention)
+  - SPPF (Spatial Pyramid Pooling - Fast)
+  - Depthwise Separable Convolutions
+  - Feature Pyramid Network with Bi-FPN structure
 
 ## Training Configuration
 ```python
