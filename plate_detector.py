@@ -1,180 +1,170 @@
+import os
 import cv2
 import numpy as np
+from paddleocr import PaddleOCR, draw_ocr
 from ultralytics import YOLO
-import os
 
-
-class LicensePlateDetector:
-    def __init__(self):
-        model_path = "best.pt"
-        if not os.path.exists(model_path):
-            raise FileNotFoundError(f"Model file not found at {model_path}")
-
-        print(f"Loading model from: {model_path}")
-        self.detector = YOLO(model_path)
-        print("Model loaded successfully")
-
-    def geometric_correction(self, image):
-        """
-        번호판 이미지의 기하학적 보정을 수행합니다.
-        """
-        # 그레이스케일 변환
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-
-        # 가우시안 블러로 노이즈 제거
-        blur = cv2.GaussianBlur(gray, (5, 5), 0)
-
-        # 엣지 검출
-        edges = cv2.Canny(blur, 50, 150)
-
-        # 컨투어 찾기
-        contours, _ = cv2.findContours(
-            edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+class LicensePlateRecognizer:
+    def __init__(self, debug_mode=False):
+        # YOLO 모델 로드
+        self.detector = YOLO('best.pt')
+        # PaddleOCR 초기화 - 최신 설정
+        self.reader = PaddleOCR(
+            use_angle_cls=True,  # 텍스트 방향 감지
+            lang='en',          # 영어 모델 사용
+            use_gpu=False,      # GPU 사용 여부
+            show_log=False,     # 로그 출력 제거
+            # 최신 버전 모델 사용
+            det_model_dir=None,  # 자동으로 최신 모델 다운로드
+            rec_model_dir=None,
+            cls_model_dir=None,
+            # 인식 파라미터 최적화
+            rec_char_dict_path=None,  # 기본 딕셔너리 사용
+            drop_score=0.5,          # 신뢰도 임계값
+            rec_image_shape="3, 48, 320"  # 이미지 shape 최적화
         )
+        self.debug_mode = debug_mode
+        if debug_mode:
+            os.makedirs('debug', exist_ok=True)
 
-        if not contours:
-            return image
+    def save_debug_image(self, img, title="image"):
+        """디버그용 이미지 저장"""
+        if not self.debug_mode:
+            return
+        output_path = os.path.join('debug', f'{title}.jpg')
+        cv2.imwrite(output_path, img)
+        print(f'이미지가 {output_path}에 저장되었습니다.')
 
-        # 가장 큰 컨투어 찾기
-        largest_contour = max(contours, key=cv2.contourArea)
+    def enhance_plate(self, img):
+        """번호판 이미지 향상"""
+        # 이미지가 너무 작으면 리사이즈
+        min_height = 100
+        height, width = img.shape[:2]
+        if height < min_height:
+            scale = min_height / height
+            img = cv2.resize(img, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
 
-        # 근사 다각형 찾기
-        epsilon = 0.02 * cv2.arcLength(largest_contour, True)
-        approx = cv2.approxPolyDP(largest_contour, epsilon, True)
+        # 대비 향상
+        lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
+        l, a, b = cv2.split(lab)
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+        l = clahe.apply(l)
+        lab = cv2.merge([l, a, b])
+        enhanced = cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
 
-        # 4개의 코너를 찾지 못한 경우 원본 반환
-        if len(approx) != 4:
-            return image
+        return enhanced
 
-        # 코너 포인트 정렬
-        pts = np.float32(approx.reshape(4, 2))
-        rect = np.zeros((4, 2), dtype=np.float32)
-
-        # 합이 가장 작은 것이 좌상단, 가장 큰 것이 우하단
-        s = pts.sum(axis=1)
-        rect[0] = pts[np.argmin(s)]  # 좌상단
-        rect[2] = pts[np.argmax(s)]  # 우하단
-
-        # 차이가 가장 작은 것이 우상단, 가장 큰 것이 좌하단
-        diff = np.diff(pts, axis=1)
-        rect[1] = pts[np.argmin(diff)]  # 우상단
-        rect[3] = pts[np.argmax(diff)]  # 좌하단
-
-        # 변환할 이미지의 너비와 높이
-        width = int(
-            max(np.linalg.norm(rect[0] - rect[1]), np.linalg.norm(rect[2] - rect[3]))
-        )
-        height = int(
-            max(np.linalg.norm(rect[0] - rect[3]), np.linalg.norm(rect[1] - rect[2]))
-        )
-
-        # 변환 행렬 계산
-        dst_points = np.array(
-            [[0, 0], [width - 1, 0], [width - 1, height - 1], [0, height - 1]],
-            dtype=np.float32,
-        )
-
-        # 투시 변환 수행
-        matrix = cv2.getPerspectiveTransform(rect, dst_points)
-        warped = cv2.warpPerspective(image, matrix, (width, height))
-
-        return warped
-
-    def detect_and_save(
-        self, image_path, output_dir="detected_plates", conf_threshold=0.3
-    ):
-        # 출력 디렉토리 생성
-        os.makedirs(output_dir, exist_ok=True)
-
+    def detect_and_read_plate(self, image_path):
         # 이미지 로드
         image = cv2.imread(image_path)
         if image is None:
-            print(f"Error: Could not read image from {image_path}")
-            return
+            raise ValueError("이미지를 불러올 수 없습니다.")
 
-        original_img = image.copy()
+        if self.debug_mode:
+            self.save_debug_image(image, "0_input_image")
 
-        # 이미지 크기 출력
-        print(f"Image shape: {image.shape}")
+        # 번호판 감지
+        results = self.detector(image_path)[0]
+        plates_info = []
 
-        # Detection 수행
-        results = self.detector(image)[0]
-        print(f"Number of detections: {len(results.boxes)}")
+        for idx, result in enumerate(results.boxes.data.tolist(), 1):
+            x1, y1, x2, y2, confidence, class_id = result
 
-        # 결과 시각화를 위한 이미지 복사
-        output_img = image.copy()
+            # 번호판 영역 추출 (여백 추가)
+            y_padding = int((y2 - y1) * 0.1)
+            x_padding = int((x2 - x1) * 0.05)
 
-        # 감지된 모든 번호판에 대해
-        for i, box in enumerate(results.boxes):
-            # Confidence가 threshold보다 높은 것만 처리
-            confidence = float(box.conf[0])
-            if confidence < conf_threshold:
+            y1_pad = max(0, int(y1) - y_padding)
+            y2_pad = min(image.shape[0], int(y2) + y_padding)
+            x1_pad = max(0, int(x1) - x_padding)
+            x2_pad = min(image.shape[1], int(x2) + x_padding)
+
+            plate_img = image[y1_pad:y2_pad, x1_pad:x2_pad]
+            if plate_img.size == 0:
                 continue
 
-            # 박스 좌표 추출
-            x1, y1, x2, y2 = map(int, box.xyxy[0])
+            if self.debug_mode:
+                print(f"\n=== 번호판 {idx} 처리 중 ===")
+                print(f"감지 신뢰도: {confidence:.2f}")
+                self.save_debug_image(plate_img, f"{idx}_plate_original")
 
-            # 좌표 출력
-            print(
-                f"Detection {i+1}: conf={confidence:.3f}, coords=({x1},{y1},{x2},{y2})"
-            )
+            # 이미지 향상
+            enhanced_plate = self.enhance_plate(plate_img)
+            if self.debug_mode:
+                self.save_debug_image(enhanced_plate, f"{idx}_plate_enhanced")
 
-            # 번호판 영역 추출
-            plate_img = original_img[y1:y2, x1:x2]
+            # OCR 수행 - 원본과 향상된 이미지 모두 시도
+            ocr_results = []
 
-            # 기하학적 보정 수행
-            corrected_plate = self.geometric_correction(plate_img)
+            # 1. 원본 이미지로 시도
+            result1 = self.reader.ocr(plate_img, cls=True)
+            if result1:
+                for line in result1:
+                    for item in line:
+                        text = item[1][0]  # 텍스트
+                        conf = item[1][1]  # 신뢰도
+                        ocr_results.append((text, conf))
 
-            # 박스 그리기
-            cv2.rectangle(output_img, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            # 2. 향상된 이미지로 시도
+            result2 = self.reader.ocr(enhanced_plate, cls=True)
+            if result2:
+                for line in result2:
+                    for item in line:
+                        text = item[1][0]
+                        conf = item[1][1]
+                        ocr_results.append((text, conf))
 
-            # Confidence 표시
-            label = f"{confidence:.2f}"
-            cv2.putText(
-                output_img,
-                label,
-                (x1, y1 - 10),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.9,
-                (0, 255, 0),
-                2,
-            )
+            # 가장 높은 신뢰도의 결과 선택
+            if ocr_results:
+                # 신뢰도가 가장 높은 결과 선택
+                plate_text, ocr_confidence = max(ocr_results, key=lambda x: x[1])
+                # 공백 제거 및 대문자 변환
+                plate_text = ''.join(plate_text.split()).upper()
+            else:
+                plate_text, ocr_confidence = "", 0.0
 
-            # 원본 번호판 이미지 저장
-            if plate_img.size > 0:
-                plate_path = os.path.join(
-                    output_dir, f"plate_{i+1}_original_conf_{confidence:.2f}.jpg"
-                )
-                cv2.imwrite(plate_path, plate_img)
-                print(f"Saved original plate image to: {plate_path}")
+            if self.debug_mode:
+                print(f"인식된 텍스트: {plate_text}")
+                print(f"OCR 신뢰도: {ocr_confidence:.2f}")
 
-                # 보정된 번호판 이미지 저장
-                corrected_path = os.path.join(
-                    output_dir, f"plate_{i+1}_corrected_conf_{confidence:.2f}.jpg"
-                )
-                cv2.imwrite(corrected_path, corrected_plate)
-                print(f"Saved corrected plate image to: {corrected_path}")
+            # 결과 저장
+            plates_info.append({
+                'bbox': (x1, y1, x2, y2),
+                'confidence': confidence,
+                'text': plate_text,
+                'ocr_confidence': ocr_confidence
+            })
 
-        # 전체 결과 저장
-        output_path = os.path.join(output_dir, "detection_result.jpg")
-        cv2.imwrite(output_path, output_img)
-        print(f"Saved detection result to: {output_path}")
+            # 결과 표시
+            cv2.rectangle(image, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
+            cv2.putText(image, plate_text,
+                        (int(x1), int(y1) - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.9, (0, 255, 0), 2)
 
+        if self.debug_mode:
+            self.save_debug_image(image, "final_result")
+
+        # 결과 저장
+        output_path = f'detected_{os.path.basename(image_path)}'
+        cv2.imwrite(output_path, image)
+
+        return plates_info
 
 # 사용 예시
 if __name__ == "__main__":
+    recognizer = LicensePlateRecognizer(debug_mode=True)
+
+    image_path = "test.jpg"
+
     try:
-        # Detector 객체 생성
-        detector = LicensePlateDetector()
+        results = recognizer.detect_and_read_plate(image_path)
 
-        # 이미지 경로 지정
-        image_path = "test.jpg"  # 테스트할 이미지 경로로 변경하세요
-
-        # Detection 수행 및 결과 저장
-        detector.detect_and_save(image_path, conf_threshold=0.3)
+        for idx, plate in enumerate(results, 1):
+            print(f"\n번호판 {idx}:")
+            print(f"텍스트: {plate['text']}")
+            print(f"감지 신뢰도: {plate['confidence']:.2f}")
+            print(f"OCR 신뢰도: {plate['ocr_confidence']:.2f}")
 
     except Exception as e:
-        print(f"Error occurred: {str(e)}")
-        import traceback
-
-        traceback.print_exc()
+        print(f"오류 발생: {e}")

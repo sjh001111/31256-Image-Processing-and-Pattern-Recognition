@@ -6,7 +6,7 @@ from ultralytics import YOLO
 
 def detect_license_plate(image_path):
     # 학습된 모델 로드 (runs/detect/train/weights/best.pt가 최고 성능 모델)
-    model = YOLO('training/runs/detect/train/weights/best.pt')
+    model = YOLO('best.pt')
 
     # 이미지에서 번호판 감지
     results = model(image_path)[0]
