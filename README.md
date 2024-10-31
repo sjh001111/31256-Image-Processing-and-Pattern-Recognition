@@ -115,12 +115,15 @@ results = model.train(
 
 ### Pipeline Process
 1. **Detection Stage**
+
 ![Detection Results](https://i.imgur.com/H9CgtoX.jpeg)
 
 2. **Preprocessing Stage**
+
 ![Preprocessing Example](https://i.imgur.com/NPqgRl0.jpeg)
 
 3. **Final Output**
+
 ![Complete Pipeline](https://i.imgur.com/5IDGEmR.jpeg)
 
 ### Sample Results
