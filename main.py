@@ -8,7 +8,6 @@ import random
 import cv2
 import numpy as np
 
-
 def get_random_test_image():
     """
     Get a random image from the test dataset
@@ -107,6 +106,11 @@ def create_result_visualisation(original_image_path, plate_info):
 
 def main():
     try:
+        if os.path.exists('result'):
+            import shutil
+            shutil.rmtree('result')
+        os.makedirs('result')
+
         # Get random test image
         image_path, image_name = get_random_test_image()
         print(f"Testing with image: {image_name}")
@@ -116,6 +120,9 @@ def main():
         from plate_detector import detect_plates
 
         plates = detect_plates(image_path)
+        if not plates:
+            print("No license plates detected in the image.")
+            return
         print(f"Found {len(plates)} license plates")
 
         # Step 2: Preprocess images
@@ -127,17 +134,24 @@ def main():
 
         # Step 3: Perform OCR
         print("\nStep 3: Performing OCR...")
-        process = subprocess.run(
-            [sys.executable, "number_recogniser.py", image_path],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-        if process.returncode != 0:
-            print("Error in detection step:")
-            print(process.stderr)
-            return False
-        print("Detection completed")
+        try:
+            process = subprocess.run(
+                [sys.executable, "number_recogniser.py", image_path],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+        except subprocess.CalledProcessError as e:
+            print("Error in OCR step:")
+            print("Return code:", e.returncode)
+            print("Error output:")
+            print(e.stderr)
+            print("Standard output:")
+            print(e.stdout)
+            return
+        except Exception as e:
+            print(f"Unexpected error running OCR: {str(e)}")
+            return
 
         # Load results and create visualisation
         with open(OCRConfig.OUTPUT_FILE, "r") as f:
@@ -148,8 +162,8 @@ def main():
             vis_image = create_result_visualisation(image_path, plate_info)
 
             # Save visualisation
-            output_path = f"results/visualisation_{image_name}"
-            os.makedirs("results", exist_ok=True)
+            output_path = f"result/3. visualisation_{image_name}"
+            os.makedirs("result", exist_ok=True)
             cv2.imwrite(output_path, vis_image)
 
             print(f"\nResults for {image_name}:")

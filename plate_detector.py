@@ -39,7 +39,7 @@ def detect_plates(image_path, config: DetectorConfig = DetectorConfig()):
         plate_img = image[y1:y2, x1:x2]
 
         # Save individual plate image
-        plate_path = os.path.join(config.OUTPUT_DIR, f"plate_{i}.jpg")
+        plate_path = os.path.join(config.OUTPUT_DIR, f"1. plate_{i}.jpg")
         cv2.imwrite(plate_path, plate_img)
 
         # Draw rectangle on original image
@@ -64,12 +64,12 @@ def detect_plates(image_path, config: DetectorConfig = DetectorConfig()):
 
     # Save visualisation
     cv2.imwrite(
-        os.path.join(config.OUTPUT_DIR, "detection_visualisation.jpg"),
+        os.path.join(config.OUTPUT_DIR, "1. detection_visualisation.jpg"),
         original_with_boxes,
     )
 
     # Save detection results
-    with open(os.path.join(config.OUTPUT_DIR, "detection_results.json"), "w") as f:
+    with open(os.path.join(config.OUTPUT_DIR, "1. detection_results.json"), "w") as f:
         json.dump(plates, f, indent=4)
 
     return plates

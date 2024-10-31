@@ -72,7 +72,7 @@ def preprocess_plates(config: PreprocessConfig = PreprocessConfig()):
     processed_plates = []
 
     # Load detection results
-    with open(os.path.join(config.INPUT_DIR, "detection_results.json"), "r") as f:
+    with open(os.path.join(config.INPUT_DIR, "1. detection_results.json"), "r") as f:
         plates = json.load(f)
 
     for i, plate_info in enumerate(plates):
@@ -95,7 +95,7 @@ def preprocess_plates(config: PreprocessConfig = PreprocessConfig()):
         cleaned = clean_image(binary, config)
 
         # Save preprocessed image
-        output_path = os.path.join(config.OUTPUT_DIR, f"preprocessed_plate_{i}.jpg")
+        output_path = os.path.join(config.OUTPUT_DIR, f"2. preprocessed_plate_{i}.jpg")
         cv2.imwrite(output_path, cleaned)
 
         # Update plate info
@@ -103,7 +103,7 @@ def preprocess_plates(config: PreprocessConfig = PreprocessConfig()):
         processed_plates.append(plate_info)
 
     # Save preprocessing results
-    with open(os.path.join(config.OUTPUT_DIR, "preprocessing_results.json"), "w") as f:
+    with open(os.path.join(config.OUTPUT_DIR, "2. preprocessing_results.json"), "w") as f:
         json.dump(processed_plates, f, indent=4)
 
     return processed_plates
