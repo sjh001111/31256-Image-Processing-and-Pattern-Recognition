@@ -58,19 +58,19 @@ result/
 ## 🏗️ System Architecture
 
 ### 1. Detection Stage (`plate_detector.py`)
-- Initial license plate localization using YOLOv11n detector
+- Initial license plate localisation using YOLOv11n detector
 - Image loading and processing
 - Outputs cropped plate images with metadata
 
 ### 2. Preprocessing Stage (`preprocessing.py`)
-- **Geometric Normalization**
+- **Geometric Normalisation**
   - Aspect ratio preservation
   - Target height resizing (200px)
 - **Image Enhancement**
   - LAB color space transformation
   - CLAHE enhancement
   - Contrast and brightness adjustment
-- **Noise Reduction & Binarization**
+- **Noise Reduction & Binarisation**
   - Bilateral filtering
   - Otsu's thresholding
   - Morphological operations
