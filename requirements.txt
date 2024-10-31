@@ -1,7 +1,0 @@
-opencv-python
-paddleocr
-ultralytics
-numpy
-PyYAML
-matplotlib
-pandas

@@ -154,7 +154,7 @@ def main():
             return
 
         # Load results and create visualisation
-        with open("result/result.json", "r") as f:
+        with open(OCRConfig.OUTPUT_FILE, "r") as f:
             results = json.load(f)
 
         for plate_info in results:

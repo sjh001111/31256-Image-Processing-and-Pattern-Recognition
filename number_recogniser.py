@@ -14,7 +14,7 @@ def recognise_text(config: OCRConfig = OCRConfig()):
     reader = PaddleOCR(use_angle_cls=config.USE_ANGLE_CLS, lang=config.LANG)
 
     # Load preprocessing results
-    with open(os.path.join(config.INPUT_DIR, config.OUTPUT_FILE), "r") as f:
+    with open(os.path.join(config.INPUT_DIR, "2. preprocessing_results.json"), "r") as f:
         plates = json.load(f)
 
     results = []
@@ -43,7 +43,7 @@ def recognise_text(config: OCRConfig = OCRConfig()):
         results.append(plate_info)
 
     # Save OCR results
-    with open(os.path.join(config.INPUT_DIR, config.OUTPUT_FILE), "w") as f:
+    with open(config.OUTPUT_FILE, "w") as f:
         json.dump(results, f, indent=4)
 
     return results

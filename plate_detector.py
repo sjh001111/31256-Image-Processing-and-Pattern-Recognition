@@ -69,7 +69,7 @@ def detect_plates(image_path, config: DetectorConfig = DetectorConfig()):
     )
 
     # Save detection results
-    with open(os.path.join(config.OUTPUT_DIR, config.OUTPUT_FILE), "w") as f:
+    with open(os.path.join(config.OUTPUT_DIR, "1. detection_results.json"), "w") as f:
         json.dump(plates, f, indent=4)
 
     return plates

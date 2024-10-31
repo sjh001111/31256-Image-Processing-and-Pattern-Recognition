@@ -67,12 +67,12 @@ def preprocess_plates(config: PreprocessConfig = PreprocessConfig()):
     """
     Preprocess detected license plate images
     """
-    os.makedirs(config.OUTPUT_FILE, exist_ok=True)
+    os.makedirs(config.OUTPUT_DIR, exist_ok=True)
 
     processed_plates = []
 
     # Load detection results
-    with open(os.path.join(config.INPUT_DIR, config.OUTPUT_FILE), "r") as f:
+    with open(os.path.join(config.INPUT_DIR, "1. detection_results.json"), "r") as f:
         plates = json.load(f)
 
     for i, plate_info in enumerate(plates):
@@ -103,7 +103,7 @@ def preprocess_plates(config: PreprocessConfig = PreprocessConfig()):
         processed_plates.append(plate_info)
 
     # Save preprocessing results
-    with open(os.path.join(config.OUTPUT_DIR, config.OUTPUT_FILE), "w") as f:
+    with open(os.path.join(config.OUTPUT_DIR, "2. preprocessing_results.json"), "w") as f:
         json.dump(processed_plates, f, indent=4)
 
     return processed_plates
