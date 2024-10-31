@@ -7,6 +7,7 @@ class DetectorConfig:
     # Model settings
     MODEL_PATH: str = "best.pt"
     OUTPUT_DIR: str = "result"
+    OUTPUT_FILE: str = "result.json"
     CONFIDENCE_THRESHOLD: float = 0.5
 
 
@@ -35,6 +36,7 @@ class PreprocessConfig:
     # Directory settings
     INPUT_DIR: str = "result"
     OUTPUT_DIR: str = "result"
+    OUTPUT_FILE: str = "result.json"
 
 
 @dataclass
@@ -46,4 +48,5 @@ class OCRConfig:
 
     # Directory settings
     INPUT_DIR: str = "result"
-    OUTPUT_FILE: str = "recognition_results.json"
+    OUTPUT_DIR: str = "result"
+    OUTPUT_FILE: str = "result.json"
