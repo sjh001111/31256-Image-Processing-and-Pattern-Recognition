@@ -13,7 +13,7 @@ class LicensePlateConfig:
     ADAPTIVE2_C = 10
 
     # OCR parameters
-    MIN_CONFIDENCE = 0.3
+    MIN_CONFIDENCE = 0.1
     ALLOW_LIST = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
     # Additional OCR parameters
