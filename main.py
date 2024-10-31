@@ -1,128 +1,165 @@
+# plate_detector.py
 import os
+
 import cv2
 import numpy as np
-import easyocr
+from paddleocr import PaddleOCR
 from ultralytics import YOLO
-from config import LicensePlateConfig as cfg
+
+from config import OCRConfig, DetectorConfig
 
 
 class LicensePlateDetector:
-    def __init__(self, model_path="best.pt", debug_mode=False):
-        self.model = YOLO(model_path)
-        self.reader = easyocr.Reader(["en"])
-        self.debug_mode = debug_mode
+    def __init__(self, ocr_config: OCRConfig = None, detector_config: DetectorConfig = None):
+        # Initialize configurations
+        self.ocr_config = ocr_config or OCRConfig()
+        self.detector_config = detector_config or DetectorConfig()
 
-        if self.debug_mode:
-            self.debug_dir = "debug_images"
-            os.makedirs(self.debug_dir, exist_ok=True)
+        # Initialize models
+        self.model = YOLO(self.detector_config.MODEL_PATH)
+        self.reader = PaddleOCR(
+            use_angle_cls=self.detector_config.USE_ANGLE_CLS,
+            lang=self.detector_config.LANG
+        )
+
+        if self.detector_config.DEBUG_MODE:
+            # Remove existing debug directory and create new one
+            if os.path.exists(self.detector_config.DEBUG_DIR):
+                for file in os.listdir(self.detector_config.DEBUG_DIR):
+                    os.remove(os.path.join(self.detector_config.DEBUG_DIR, file))
+            os.makedirs(self.detector_config.DEBUG_DIR, exist_ok=True)
 
     def save_debug_image(self, image, stage_name, plate_index):
-        if self.debug_mode:
-            filename = f"{self.debug_dir}/plate_{plate_index}_{stage_name}.jpg"
+        """Save intermediate images for debugging"""
+        if self.detector_config.DEBUG_MODE:
+            filename = (
+                f"{self.detector_config.DEBUG_DIR}/plate_{plate_index}_{stage_name}.jpg"
+            )
             cv2.imwrite(filename, image)
             print(f"Saved {stage_name} image to {filename}")
+            return filename
+        return None
 
-    def enhance_contrast(self, image):
-        """Enhance image contrast using CLAHE"""
+    def enhance_image(self, image):
+        """Enhance image quality"""
         if len(image.shape) == 3:
+            # Convert to LAB color space
             lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
             l, a, b = cv2.split(lab)
-            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+
+            # Apply CLAHE to L channel
+            clahe = cv2.createCLAHE(
+                clipLimit=self.ocr_config.CONTRAST_LIMIT, tileGridSize=(8, 8)
+            )
             cl = clahe.apply(l)
-            enhanced = cv2.merge((cl, a, b))
-            return cv2.cvtColor(enhanced, cv2.COLOR_LAB2BGR)
-        else:
-            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-            return clahe.apply(image)
+
+            # Merge channels and convert back
+            enhanced_lab = cv2.merge((cl, a, b))
+            enhanced = cv2.cvtColor(enhanced_lab, cv2.COLOR_LAB2BGR)
+
+            # Additional contrast enhancement
+            enhanced = cv2.convertScaleAbs(
+                enhanced,
+                alpha=self.ocr_config.CONTRAST_ALPHA,
+                beta=self.ocr_config.BRIGHTNESS_BETA,
+            )
+
+            return enhanced
+        return image
+
+    def remove_noise(self, image):
+        """Remove noise while preserving edges"""
+        return cv2.bilateralFilter(
+            image,
+            self.ocr_config.BILATERAL_D,
+            self.ocr_config.BILATERAL_SIGMA_COLOR,
+            self.ocr_config.BILATERAL_SIGMA_SPACE,
+        )
+
+    def clean_image(self, binary_image):
+        """Clean binary image using morphological operations"""
+        kernel = np.ones(self.ocr_config.MORPH_KERNEL_SIZE, np.uint8)
+
+        # Remove noise
+        cleaned = cv2.morphologyEx(
+            binary_image,
+            cv2.MORPH_CLOSE,
+            kernel,
+            iterations=self.ocr_config.MORPH_ITERATIONS,
+        )
+
+        # Fill small holes
+        cleaned = cv2.morphologyEx(
+            cleaned, cv2.MORPH_OPEN, kernel, iterations=self.ocr_config.MORPH_ITERATIONS
+        )
+
+        return cleaned
 
     def preprocess_plate(self, plate_img, plate_index):
-        """Enhanced preprocessing pipeline"""
-        # Save original crop
-        self.save_debug_image(plate_img, "1_original_crop", plate_index)
+        """Preprocess license plate image"""
+        # Original crop
+        orig_path = self.save_debug_image(plate_img, "1_original", plate_index)
 
-        # Resize while maintaining aspect ratio
+        # Resize
         aspect_ratio = plate_img.shape[1] / plate_img.shape[0]
-        target_width = int(cfg.TARGET_HEIGHT * aspect_ratio)
-        plate_img = cv2.resize(plate_img, (target_width, cfg.TARGET_HEIGHT))
-        self.save_debug_image(plate_img, "2_resized", plate_index)
+        target_width = int(self.ocr_config.TARGET_HEIGHT * aspect_ratio)
+        resized = cv2.resize(plate_img, (target_width, self.ocr_config.TARGET_HEIGHT))
+        resized_path = self.save_debug_image(resized, "2_resized", plate_index)
 
-        # Enhance contrast
-        enhanced = self.enhance_contrast(plate_img)
-        self.save_debug_image(enhanced, "3_enhanced", plate_index)
+        # Enhance
+        enhanced = self.enhance_image(resized)
+        enhanced_path = self.save_debug_image(enhanced, "3_enhanced", plate_index)
 
         # Convert to grayscale
         gray = cv2.cvtColor(enhanced, cv2.COLOR_BGR2GRAY)
-        self.save_debug_image(gray, "4_grayscale", plate_index)
+        gray_path = self.save_debug_image(gray, "4_gray", plate_index)
 
-        # Apply bilateral filter
-        denoised = cv2.bilateralFilter(
-            gray, cfg.BILATERAL_D, cfg.BILATERAL_SIGMA_COLOR, cfg.BILATERAL_SIGMA_SPACE
-        )
-        self.save_debug_image(denoised, "5_denoised", plate_index)
+        # Remove noise
+        denoised = self.remove_noise(gray)
+        denoised_path = self.save_debug_image(denoised, "5_denoised", plate_index)
 
-        preprocessed_images = []
+        # Apply Otsu's thresholding
+        blur = cv2.GaussianBlur(denoised, self.ocr_config.OTSU_GAUSSIAN_BLUR, 0)
+        _, otsu = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+        otsu_cleaned = self.clean_image(otsu)
+        otsu_path = self.save_debug_image(otsu_cleaned, "6_otsu", plate_index)
 
-        # Multiple threshold attempts
-        # 1. Gaussian adaptive threshold
-        adaptive = cv2.adaptiveThreshold(
-            denoised,
-            255,
-            cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-            cv2.THRESH_BINARY,  # Not inverting for white text on black background
-            cfg.ADAPTIVE_BLOCK_SIZE,
-            cfg.ADAPTIVE_C,
-        )
-        preprocessed_images.append(adaptive)
-        self.save_debug_image(adaptive, "6a_adaptive", plate_index)
-
-        # 2. Inverted adaptive threshold for dark text
-        adaptive_inv = cv2.adaptiveThreshold(
-            denoised,
-            255,
-            cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-            cv2.THRESH_BINARY_INV,  # Inverting for black text on white background
-            cfg.ADAPTIVE_BLOCK_SIZE,
-            cfg.ADAPTIVE_C,
-        )
-        preprocessed_images.append(adaptive_inv)
-        self.save_debug_image(adaptive_inv, "6b_adaptive_inv", plate_index)
-
-        # Also add grayscale for direct OCR
-        preprocessed_images.append(denoised)
-
-        return preprocessed_images
+        return [
+            orig_path,
+            resized_path,
+            enhanced_path,
+            gray_path,
+            denoised_path,
+            otsu_path,
+        ]
 
     def recognize_plate(self, plate_img, plate_index):
-        """Improved OCR with multiple attempts"""
-        preprocessed_images = self.preprocess_plate(plate_img, plate_index)
+        """Perform OCR using PaddleOCR"""
+        image_paths = self.preprocess_plate(plate_img, plate_index)
         all_results = []
 
-        for idx, processed_img in enumerate(preprocessed_images):
-            results = self.reader.readtext(
-                processed_img,
-                allowlist=cfg.ALLOW_LIST,
-                detail=1,
-                paragraph=cfg.PARAGRAPH,
-                height_ths=cfg.HEIGHT_THRESHOLD,
-                width_ths=cfg.WIDTH_THRESHOLD,
-                contrast_ths=cfg.CONTRAST_THRESHOLD,
-            )
+        for img_path in image_paths:
+            if img_path:  # Check if debug mode is on and path exists
+                result = self.reader.ocr(img_path, cls=True)
 
-            for bbox, text, conf in results:
-                cleaned_text = "".join(c for c in text if c.isalnum())
-                if (
-                    len(cleaned_text) >= cfg.MIN_TEXT_LENGTH
-                    and len(cleaned_text) <= cfg.MAX_TEXT_LENGTH
-                    and conf > cfg.MIN_CONFIDENCE
-                ):
-                    all_results.append((cleaned_text, conf))
+                if result and result[0]:
+                    for line in result[0]:
+                        if len(line) >= 2:
+                            text = line[1][0]
+                            confidence = line[1][1]
 
-        if not all_results:
-            return ""
+                            # Basic cleaning
+                            cleaned_text = ''.join(c for c in text if c.isalnum() or c.isspace())
 
-        # Sort by confidence and select best result
-        all_results.sort(key=lambda x: x[1], reverse=True)
-        return all_results[0][0]
+                            if confidence > self.ocr_config.CONFIDENCE_THRESHOLD:
+                                all_results.append((cleaned_text, confidence))
+
+        if all_results:
+            # Sort by confidence score
+            all_results.sort(key=lambda x: x[1], reverse=True)
+            return all_results[0][0]
+
+        return ""
 
     def detect_and_recognize(self, image_path, save_results=True):
         """Main detection and recognition function"""
@@ -147,6 +184,7 @@ class LicensePlateDetector:
                 {"bbox": (x1, y1, x2, y2), "confidence": confidence, "text": plate_text}
             )
 
+            # Visualization
             cv2.rectangle(visual_output, (x1, y1), (x2, y2), (0, 255, 0), 2)
             text = f"{plate_text} ({confidence:.2f})"
             cv2.putText(
@@ -171,7 +209,7 @@ def main():
     image_path = "test.jpg"
 
     try:
-        detector = LicensePlateDetector(debug_mode=True)
+        detector = LicensePlateDetector()
         detected_plates, _ = detector.detect_and_recognize(image_path)
 
         print("\nDetected License Plates:")
